@@ -1,22 +1,37 @@
-const { REST, Routes } = require('discord.js');
+const fs = require('node:fs');
+const path = require('node:path');
+const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
+const { token } = require('./config.json');
 
-const commands = [
-	{
-		name: 'ping',
-		description: 'Replies with Pong!',
-	},
-];
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-const rest = new REST({ version: '10' }).setToken(TOKEN);
+client.commands = new Collection();
+const commandsPath = path.join(__dirname, 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
-(async () => {
+for (const file of commandFiles) {
+	const filePath = path.join(commandsPath, file);
+	const command = require(filePath);
+	client.commands.set(command.data.name, command);
+}
+
+client.once(Events.ClientReady, () => {
+	console.log('Ready!');
+});
+
+client.on(Events.InteractionCreate, async interaction => {
+	if (!interaction.isChatInputCommand()) return;
+
+	const command = client.commands.get(interaction.commandName);
+
+	if (!command) return;
+
 	try {
-		console.log('Started refreshing application (/) commands.');
-
-		await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-
-		console.log('Successfully reloaded application (/) commands.');
+		await command.execute(interaction);
 	} catch (error) {
 		console.error(error);
+		await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
 	}
-})();
+});
+
+client.login(token);
